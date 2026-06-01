@@ -342,8 +342,8 @@ let activeBreak = null;
 function z(n){return String(n).padStart(2,'0')}
 
 function getIST(){
-  const now = new Date();
-  return new Date(now.getTime() + (5.5*60 - now.getTimezoneOffset())*60000);
+  // Always parse the current moment in IST regardless of browser timezone
+  return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Kolkata'}));
 }
 function istMins(d){return d.getHours()*60 + d.getMinutes()}
 
