@@ -323,9 +323,16 @@ footer{
 
 <script>
 const MAX_BREAK_MINS = 20;
-const WINDOW_START = 16*60; // 4:00 PM IST
-const WINDOW_END = 16*60+40; // 4:40 PM IST
-const BREAK_WINDOW_LABEL = '16:00 – 16:40';
+
+const START_HOUR = 13;
+const START_MINUTE = 50;
+
+const END_HOUR = 14;
+const END_MINUTE = 10;
+
+const WINDOW_START = START_HOUR * 60 + START_MINUTE;
+const WINDOW_END = END_HOUR * 60 + END_MINUTE;
+const BREAK_WINDOW_LABEL = `${START_HOUR}:${String(START_MINUTE).padStart(2, '0')} – ${END_HOUR}:${String(END_MINUTE).padStart(2, '0')}`;
 
 let timerInterval = null;
 let secsLeft = MAX_BREAK_MINS*60;
