@@ -425,17 +425,39 @@ function endBreakEarly(){
   clearInterval(timerInterval);finishBreak(false);
 }
 
+const API = 'http://64.227.188.196:9999';
+
+async function postBreakToServer(entry){
+  try{
+    await fetch(API+'/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(entry)
+    });
+  }catch(e){console.warn('Server log failed (offline?):', e)}
+}
+
+async function fetchServerLogs(){
+  try{
+    const r=await fetch(API+'/?t='+Date.now());
+    const d=await r.json();
+    return Array.isArray(d.logs)?d.logs:[];
+  }catch(e){return null}
+}
+
 function finishBreak(natural){
   const now=getIST();
   const elapsed=Math.max(1,Math.round((Date.now()-activeBreak.startTs)/60000));
-  const logs=loadLogs();
-  logs.push({
+  const entry={
     name:activeBreak.name,slot:activeBreak.slot,
     startLabel:activeBreak.startLabel,
     endLabel:`${z(now.getHours())}:${z(now.getMinutes())}`,
     duration:elapsed
-  });
+  };
+  const logs=loadLogs();
+  logs.push(entry);
   saveLogs(logs);
+  postBreakToServer(entry);
   if(natural){
     speak(`${activeBreak.name}, your break is over. Please return to your workstation. Welcome back to Social Drishti!`);
   }else{
@@ -466,28 +488,34 @@ function showTab(name){
   });
   document.getElementById('setup-screen').style.display=name==='setup'?'block':'none';
   document.getElementById('log-screen').style.display=name==='log'?'block':'none';
-  if(name==='log'){renderLog();buildSlotTable()}
-  if(name==='setup'){buildHeroSlots()}
+  if(name==='log'){renderLog();buildSlotTable();}
+  if(name==='setup'){buildHeroSlots();}
 }
 
-function renderLog(){
-  const logs=loadLogs();
+async function renderLog(){
   const list=document.getElementById('log-list');
-  if(!logs.length){list.innerHTML='<div class="log-empty">No breaks recorded today.</div>';return}
+  list.innerHTML='<div class="log-empty" style="opacity:0.5">Loading…</div>';
+  const serverLogs=await fetchServerLogs();
+  const logs=serverLogs!==null?serverLogs:loadLogs();
+  const src=serverLogs!==null
+    ?'<span style="font-size:10px;color:var(--gold);margin-left:8px;font-family:monospace">● server</span>'
+    :'<span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace">● local</span>';
+  if(!logs.length){list.innerHTML='<div class="log-empty">No breaks recorded today.'+src+'</div>';return}
   list.innerHTML=logs.map((l,i)=>`
     <div class="log-row">
       <div class="log-index">${i+1}</div>
       <div>
         <div class="log-name">${l.name}</div>
-        <div class="log-meta">Slot ${l.slot} &nbsp;·&nbsp; ${l.startLabel} → ${l.endLabel}</div>
+        <div class="log-meta">Window ${l.slot||BREAK_WINDOW_LABEL} &nbsp;·&nbsp; ${l.startLabel} → ${l.endLabel}</div>
       </div>
       <div class="log-dur">${l.duration}min</div>
-    </div>`).join('');
+    </div>`).join('')+`<div style="text-align:right;padding:8px 0 0">${src}</div>`;
 }
 
-function buildSlotTable(){
-  const logs=loadLogs();
+async function buildSlotTable(){
   const tbl=document.getElementById('slot-table');
+  const serverLogs=await fetchServerLogs();
+  const logs=serverLogs!==null?serverLogs:loadLogs();
   const entry=logs[0];
   tbl.innerHTML=`<tr>
     <td>${BREAK_WINDOW_LABEL}</td>
@@ -496,9 +524,16 @@ function buildSlotTable(){
   </tr>`;
 }
 
-function clearLogs(){
+async function clearLogs(){
   if(!confirm('Clear all break logs for today?')) return;
   localStorage.removeItem(storageKey());
+  try{
+    await fetch(API+'/',{
+      method:'DELETE',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({})
+    });
+  }catch(e){console.warn('Server clear failed:', e)}
   renderLog();buildSlotTable();buildHeroSlots();
 }
 
