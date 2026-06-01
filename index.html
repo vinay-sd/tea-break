@@ -390,14 +390,14 @@ function startBreak(){
   const now=getIST();const nowM=istMins(now);
   if(activeBreak){warn('⚠  A break is already in progress.');return}
   if(hasBreakToday()){warn('⚠  Only one break is allowed per day. Today\'s break is already used.');return}
-  if(nowM<WINDOW_START){warn('⚠  Break starts at 4:00 PM IST.');return}
-  if(nowM>=WINDOW_END){warn('⚠  Break window closed at 4:40 PM IST.');return}
+  if(nowM<WINDOW_START){warn(`⚠  Break window opens at ${BREAK_WINDOW_LABEL.split(' – ')[0]} IST.`);return}
+  if(nowM>=WINDOW_END){warn(`⚠  Break window closed at ${BREAK_WINDOW_LABEL.split(' – ')[1]} IST.`);return}
 
   const windowEnd = new Date(now);
-  windowEnd.setHours(16,40,0,0);
+  windowEnd.setHours(END_HOUR, END_MINUTE, 0, 0);
   const remainingToWindowEnd = Math.floor((windowEnd.getTime()-now.getTime())/1000);
   breakTotalSecs = Math.min(MAX_BREAK_MINS*60, Math.max(0, remainingToWindowEnd));
-  if(breakTotalSecs<=0){warn('⚠  Break window closed at 4:40 PM IST.');return}
+  if(breakTotalSecs<=0){warn(`⚠  Break window closed at ${BREAK_WINDOW_LABEL.split(' – ')[1]} IST.`);return}
   
   const endDate=new Date(now.getTime()+breakTotalSecs*1000);
   activeBreak={
