@@ -130,6 +130,11 @@ header{
 
 /* ── ACTIVE TIMER ─────────────────────────── */
 #active-screen{display:none}
+.break-time-row{display:flex;align-items:center;justify-content:center;gap:16px;margin:14px 0 4px;flex-wrap:wrap}
+.btr-item{text-align:center}
+.btr-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px}
+.btr-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:600;color:var(--gold)}
+.btr-sep{font-size:18px;color:var(--dim);margin-top:10px}
 
 .remind-bar{
   background:var(--gold);color:#080808;
@@ -288,7 +293,13 @@ footer{
       <div id="timer-display">20:00</div>
       <div id="timer-sub">Break in Progress</div>
       <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:100%"></div></div>
-      <div id="ends-at"></div>
+      <div class="break-time-row">
+        <div class="btr-item"><div class="btr-label">Started</div><div class="btr-val" id="starts-at">—</div></div>
+        <div class="btr-sep">→</div>
+        <div class="btr-item"><div class="btr-label">Ends</div><div class="btr-val" id="ends-at">—</div></div>
+        <div class="btr-sep">·</div>
+        <div class="btr-item"><div class="btr-label">Duration</div><div class="btr-val" id="break-dur">—</div></div>
+      </div>
       <button class="btn-end" onclick="endBreakEarly()">End break early</button>
     </div>
   </div>
@@ -391,7 +402,9 @@ function startBreak(){
   };
 
   document.getElementById('t-name').textContent=name;
-  document.getElementById('ends-at').textContent=`Ends at ${activeBreak.endLabel} IST`;
+  document.getElementById('starts-at').textContent=activeBreak.startLabel;
+  document.getElementById('ends-at').textContent=activeBreak.endLabel;
+  document.getElementById('break-dur').textContent=`${Math.round(breakTotalSecs/60)}min`;
   document.getElementById('main-tabs').style.display='none';
   document.getElementById('setup-screen').style.display='none';
   document.getElementById('active-screen').style.display='block';
