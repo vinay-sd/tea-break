@@ -1,1 +1,5 @@
 ./ssh_helper.py
+ssh_helper.py
+./patch_ngnix.py
+patch_ngnix.py
+.gitignore

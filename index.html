@@ -334,15 +334,17 @@ const WINDOW_START = START_HOUR * 60 + START_MINUTE;
 const WINDOW_END = END_HOUR * 60 + END_MINUTE;
 const BREAK_WINDOW_LABEL = `${START_HOUR}:${String(START_MINUTE).padStart(2, '0')} – ${END_HOUR}:${String(END_MINUTE).padStart(2, '0')}`;
 
+const ACTIVE_KEY = 'sd_active_break';
+
 let timerInterval = null;
 let secsLeft = MAX_BREAK_MINS*60;
 let breakTotalSecs = MAX_BREAK_MINS*60;
 let activeBreak = null;
+let warned1min = false;
 
 function z(n){return String(n).padStart(2,'0')}
 
 function getIST(){
-  // Always parse the current moment in IST regardless of browser timezone
   return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Kolkata'}));
 }
 function istMins(d){return d.getHours()*60 + d.getMinutes()}
@@ -354,6 +356,18 @@ function storageKey(){
 function loadLogs(){try{return JSON.parse(localStorage.getItem(storageKey())||'[]')}catch{return[]}}
 function saveLogs(l){try{localStorage.setItem(storageKey(),JSON.stringify(l))}catch{}}
 function hasBreakToday(){return loadLogs().length>0}
+
+/* ── Persist active break across browser closes ── */
+function saveActiveBreak(ab){try{localStorage.setItem(ACTIVE_KEY,JSON.stringify(ab))}catch{}}
+function loadActiveBreak(){try{return JSON.parse(localStorage.getItem(ACTIVE_KEY)||'null')}catch{return null}}
+function clearActiveBreak(){try{localStorage.removeItem(ACTIVE_KEY)}catch{}}
+
+/* ── Compute remaining seconds from wall clock (handles sleep/suspension) ── */
+function computeSecsLeft(){
+  if(!activeBreak) return 0;
+  const elapsed=Math.floor((Date.now()-activeBreak.startTs)/1000);
+  return Math.max(0, breakTotalSecs - elapsed);
+}
 
 function windowStatus(){
   const nowM = istMins(getIST());
@@ -383,10 +397,65 @@ function buildHeroSlots(){
 function warn(msg){const b=document.getElementById('warn-box');b.style.display='block';b.textContent=msg}
 function clearWarn(){document.getElementById('warn-box').style.display='none'}
 
+function showActiveUI(ab){
+  document.getElementById('t-name').textContent=ab.name;
+  document.getElementById('starts-at').textContent=ab.startLabel;
+  document.getElementById('ends-at').textContent=ab.endLabel;
+  document.getElementById('break-dur').textContent=`${Math.round(breakTotalSecs/60)}min`;
+  document.getElementById('main-tabs').style.display='none';
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('log-screen').style.display='none';
+  document.getElementById('active-screen').style.display='block';
+  document.getElementById('remind-bar').style.display='block';
+}
+
+/* Resume a break that was saved to localStorage (e.g. after browser close / device sleep) */
+function resumeBreak(ab){
+  activeBreak = ab;
+  breakTotalSecs = ab.breakTotalSecs || MAX_BREAK_MINS*60;
+  secsLeft = computeSecsLeft();
+
+  if(secsLeft <= 0){
+    /* Break expired while the page was closed – finish it silently */
+    clearActiveBreak();
+    const now=getIST();
+    const elapsed=Math.max(1,Math.round(breakTotalSecs/60));
+    const entry={
+      name:ab.name, slot:ab.slot,
+      startLabel:ab.startLabel,
+      endLabel:`${z(now.getHours())}:${z(now.getMinutes())}`,
+      duration:elapsed
+    };
+    const logs=loadLogs(); logs.push(entry); saveLogs(logs);
+    postBreakToServer(entry);
+    activeBreak=null;
+    buildHeroSlots();
+    return;
+  }
+
+  warned1min = secsLeft <= 60; /* don't re-fire the 1-min warning if already past it */
+  showActiveUI(ab);
+  renderTimer();
+  timerInterval=setInterval(tick,1000);
+}
+
 function startBreak(){
   const name = document.getElementById('user-name').value.trim();
   if(!name){warn('⚠  Please enter your name first.');return}
   clearWarn();
+
+  /* If there's a saved active break for this name, resume it */
+  const saved = loadActiveBreak();
+  if(saved){
+    if(saved.name.toLowerCase()===name.toLowerCase()){
+      resumeBreak(saved);
+      return;
+    } else {
+      warn(`⚠  ${saved.name}'s break is currently active.`);
+      return;
+    }
+  }
+
   const now=getIST();const nowM=istMins(now);
   if(activeBreak){warn('⚠  A break is already in progress.');return}
   if(hasBreakToday()){warn('⚠  Only one break is allowed per day. Today\'s break is already used.');return}
@@ -398,36 +467,35 @@ function startBreak(){
   const remainingToWindowEnd = Math.floor((windowEnd.getTime()-now.getTime())/1000);
   breakTotalSecs = Math.min(MAX_BREAK_MINS*60, Math.max(0, remainingToWindowEnd));
   if(breakTotalSecs<=0){warn(`⚠  Break window closed at ${BREAK_WINDOW_LABEL.split(' – ')[1]} IST.`);return}
-  
+
   const endDate=new Date(now.getTime()+breakTotalSecs*1000);
   activeBreak={
     name,
     slot: BREAK_WINDOW_LABEL,
     startLabel:`${z(now.getHours())}:${z(now.getMinutes())}`,
     endLabel:`${z(endDate.getHours())}:${z(endDate.getMinutes())}`,
-    startTs:Date.now()
+    startTs: Date.now(),
+    breakTotalSecs   /* store so we can restore it later */
   };
+  saveActiveBreak(activeBreak);
 
-  document.getElementById('t-name').textContent=name;
-  document.getElementById('starts-at').textContent=activeBreak.startLabel;
-  document.getElementById('ends-at').textContent=activeBreak.endLabel;
-  document.getElementById('break-dur').textContent=`${Math.round(breakTotalSecs/60)}min`;
-  document.getElementById('main-tabs').style.display='none';
-  document.getElementById('setup-screen').style.display='none';
-  document.getElementById('active-screen').style.display='block';
-  const rb=document.getElementById('remind-bar');
-  rb.style.display='block';
-  
+  warned1min = false;
+  showActiveUI(activeBreak);
   speak(`${name}, please increase your volume and disconnect Bluetooth. Your break starts now and ends at ${activeBreak.endLabel} IST. Enjoy your break!`);
-  
+
   secsLeft=breakTotalSecs;
   renderTimer();
   timerInterval=setInterval(tick,1000);
 }
 
 function tick(){
-  secsLeft--;renderTimer();
-  if(secsLeft===60) speak(`${activeBreak.name}, one minute remaining on your break.`);
+  /* Always recompute from wall clock — handles device sleep / tab suspension */
+  secsLeft = computeSecsLeft();
+  renderTimer();
+  if(!warned1min && secsLeft<=60 && secsLeft>0){
+    warned1min=true;
+    speak(`${activeBreak.name}, one minute remaining on your break.`);
+  }
   if(secsLeft<=0){clearInterval(timerInterval);finishBreak(true)}
 }
 
@@ -478,6 +546,7 @@ function finishBreak(natural){
   logs.push(entry);
   saveLogs(logs);
   postBreakToServer(entry);
+  clearActiveBreak(); /* remove persisted break */
   if(natural){
     speak(`${activeBreak.name}, your break is over. Please return to your workstation. Welcome back to Social Drishti!`);
   }else{
@@ -557,7 +626,13 @@ async function clearLogs(){
   renderLog();buildSlotTable();buildHeroSlots();
 }
 
-buildHeroSlots();
+/* ── Bootstrap ── */
+function initPage(){
+  buildHeroSlots();
+  const saved = loadActiveBreak();
+  if(saved) resumeBreak(saved);
+}
+initPage();
 </script>
 </body>
 </html>
